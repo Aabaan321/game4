@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Easy Ping Pong</title>
+    <title>Impossible Ping Pong</title>
     <style>
         body {
             background: #1a1a1a;
@@ -33,10 +33,10 @@
             x: canvas.width / 2,
             y: canvas.height / 2,
             size: 12,
-            speed: 400,
+            speed: 700,
             dx: 1,
             dy: 1,
-            maxSpeed: 800
+            maxSpeed: 1200
         };
 
         const paddle = {
@@ -56,9 +56,7 @@
             x: canvas.width - 50 - paddle.width,
             y: canvas.height / 2 - paddle.height / 2,
             velocity: 0,
-            score: 0,
-            reactionTime: 0.5,  // Increased reaction time
-            maxSpeed: 200       // Reduced speed
+            score: 0
         };
 
         const keys = {
@@ -81,17 +79,8 @@
             if (keys.up) player.y -= paddle.speed * deltaTime;
             if (keys.down) player.y += paddle.speed * deltaTime;
 
-            // Weak computer AI
-            if (ball.y > computer.y + paddle.height) {
-                computer.y += computer.maxSpeed * deltaTime * Math.random(); // Random slow movement
-            } else if (ball.y < computer.y) {
-                computer.y -= computer.maxSpeed * deltaTime * Math.random();
-            }
-
-            // Sometimes move in wrong direction
-            if (Math.random() < 0.1) {
-                computer.y += (Math.random() - 0.5) * 100 * deltaTime;
-            }
+            // Perfect computer AI
+            computer.y = ball.y - paddle.height / 2;
 
             // Boundaries
             player.y = clamp(player.y, 0, canvas.height - paddle.height);
@@ -101,6 +90,15 @@
         function updateBall(deltaTime) {
             ball.x += ball.dx * ball.speed * deltaTime;
             ball.y += ball.dy * ball.speed * deltaTime;
+
+            // When ball hits computer paddle, aim for corners away from player paddle
+            if (ball.dx < 0 && ball.x < canvas.width * 0.7 && ball.x > canvas.width * 0.5) {
+                if (player.y < canvas.height / 2) {
+                    ball.dy = Math.abs(ball.dy); // Aim for bottom
+                } else {
+                    ball.dy = -Math.abs(ball.dy); // Aim for top
+                }
+            }
 
             // Wall collisions
             if (ball.y < ball.size || ball.y > canvas.height - ball.size) {
@@ -123,15 +121,22 @@
             }
         }
 
-        function checkPaddleCollision(paddle) {
-            if (ball.x < paddle.x + paddle.width && 
-                ball.x > paddle.x - ball.size && 
-                ball.y > paddle.y - ball.size && 
-                ball.y < paddle.y + paddle.height + ball.size) {
+        function checkPaddleCollision(paddleObj) {
+            if (ball.x < paddleObj.x + paddle.width && 
+                ball.x > paddleObj.x - ball.size && 
+                ball.y > paddleObj.y - ball.size && 
+                ball.y < paddleObj.y + paddle.height + ball.size) {
                 
-                const hitPos = (ball.y - (paddle.y + paddle.height/2)) / (paddle.height/2);
                 ball.dx *= -1;
-                ball.dy = hitPos * 1.5;
+                
+                if (paddleObj === computer) {
+                    // Computer always hits with perfect angle and speed
+                    ball.speed = ball.maxSpeed;
+                    ball.dy = (Math.random() > 0.5 ? 1 : -1) * Math.random();
+                } else {
+                    const hitPos = (ball.y - (paddleObj.y + paddle.height/2)) / (paddle.height/2);
+                    ball.dy = hitPos * 1.5;
+                }
                 
                 const magnitude = Math.sqrt(ball.dx * ball.dx + ball.dy * ball.dy);
                 ball.dx /= magnitude;
@@ -145,9 +150,17 @@
         function resetBall(winner) {
             ball.x = canvas.width / 2;
             ball.y = canvas.height / 2;
-            ball.speed = 400;
-            ball.dx = winner === 'player' ? 1 : -1;
-            ball.dy = (Math.random() - 0.5) * 2;
+            ball.speed = 700;
+            
+            if (winner === 'computer') {
+                // After computer scores, make next serve faster and unpredictable
+                ball.dx = -1;
+                ball.speed = ball.maxSpeed * 0.8;
+                ball.dy = (Math.random() - 0.5) * 2;
+            } else {
+                ball.dx = 1;
+                ball.dy = (Math.random() - 0.5) * 2;
+            }
             
             const magnitude = Math.sqrt(ball.dx * ball.dx + ball.dy * ball.dy);
             ball.dx /= magnitude;
@@ -178,16 +191,9 @@
             ctx.shadowBlur = 15;
             ctx.shadowColor = 'rgba(255, 255, 255, 0.5)';
             ctx.fillStyle = 'white';
-            
-            // Player paddle
             ctx.fillRect(player.x, player.y, paddle.width, paddle.height);
-            
-            // Computer paddle (slightly transparent to show it's weaker)
-            ctx.globalAlpha = 0.7;
             ctx.fillRect(computer.x, computer.y, paddle.width, paddle.height);
-            ctx.globalAlpha = 1.0;
 
-            // Ball
             ctx.beginPath();
             ctx.arc(ball.x, ball.y, ball.size, 0, Math.PI * 2);
             ctx.fill();
