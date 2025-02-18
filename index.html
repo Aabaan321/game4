@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Impossible Ping Pong</title>
+    <title>Fair Ping Pong</title>
     <style>
         body {
             background: #1a1a1a;
@@ -33,16 +33,16 @@
             x: canvas.width / 2,
             y: canvas.height / 2,
             size: 12,
-            speed: 700,
+            speed: 500,
             dx: 1,
             dy: 1,
-            maxSpeed: 1200
+            maxSpeed: 800
         };
 
         const paddle = {
             width: 12,
             height: 100,
-            speed: 600
+            speed: 550
         };
 
         const player = {
@@ -56,7 +56,10 @@
             x: canvas.width - 50 - paddle.width,
             y: canvas.height / 2 - paddle.height / 2,
             velocity: 0,
-            score: 0
+            score: 0,
+            targetY: canvas.height / 2,
+            reactionDelay: 100, // milliseconds
+            lastUpdate: 0
         };
 
         const keys = {
@@ -79,8 +82,19 @@
             if (keys.up) player.y -= paddle.speed * deltaTime;
             if (keys.down) player.y += paddle.speed * deltaTime;
 
-            // Perfect computer AI
-            computer.y = ball.y - paddle.height / 2;
+            // Human-like computer AI
+            if (Date.now() - computer.lastUpdate > computer.reactionDelay) {
+                computer.targetY = ball.y - paddle.height / 2;
+                computer.lastUpdate = Date.now();
+            }
+
+            // Add some prediction error
+            const errorMargin = 20;
+            computer.targetY += (Math.random() - 0.5) * errorMargin;
+
+            // Smooth movement towards target
+            const diff = computer.targetY - computer.y;
+            computer.y += diff * 0.1;
 
             // Boundaries
             player.y = clamp(player.y, 0, canvas.height - paddle.height);
@@ -91,15 +105,6 @@
             ball.x += ball.dx * ball.speed * deltaTime;
             ball.y += ball.dy * ball.speed * deltaTime;
 
-            // When ball hits computer paddle, aim for corners away from player paddle
-            if (ball.dx < 0 && ball.x < canvas.width * 0.7 && ball.x > canvas.width * 0.5) {
-                if (player.y < canvas.height / 2) {
-                    ball.dy = Math.abs(ball.dy); // Aim for bottom
-                } else {
-                    ball.dy = -Math.abs(ball.dy); // Aim for top
-                }
-            }
-
             // Wall collisions
             if (ball.y < ball.size || ball.y > canvas.height - ball.size) {
                 ball.dy *= -1;
@@ -108,7 +113,8 @@
 
             // Paddle collisions
             if (checkPaddleCollision(player) || checkPaddleCollision(computer)) {
-                ball.speed = Math.min(ball.speed * 1.1, ball.maxSpeed);
+                // Moderate speed increase on hits
+                ball.speed = Math.min(ball.speed * 1.05, ball.maxSpeed);
             }
 
             // Scoring
@@ -129,15 +135,11 @@
                 
                 ball.dx *= -1;
                 
-                if (paddleObj === computer) {
-                    // Computer always hits with perfect angle and speed
-                    ball.speed = ball.maxSpeed;
-                    ball.dy = (Math.random() > 0.5 ? 1 : -1) * Math.random();
-                } else {
-                    const hitPos = (ball.y - (paddleObj.y + paddle.height/2)) / (paddle.height/2);
-                    ball.dy = hitPos * 1.5;
-                }
+                // Add some randomness to the return angle
+                const hitPos = (ball.y - (paddleObj.y + paddle.height/2)) / (paddle.height/2);
+                ball.dy = hitPos * (1 + Math.random() * 0.4);
                 
+                // Normalize the direction vector
                 const magnitude = Math.sqrt(ball.dx * ball.dx + ball.dy * ball.dy);
                 ball.dx /= magnitude;
                 ball.dy /= magnitude;
@@ -150,17 +152,9 @@
         function resetBall(winner) {
             ball.x = canvas.width / 2;
             ball.y = canvas.height / 2;
-            ball.speed = 700;
-            
-            if (winner === 'computer') {
-                // After computer scores, make next serve faster and unpredictable
-                ball.dx = -1;
-                ball.speed = ball.maxSpeed * 0.8;
-                ball.dy = (Math.random() - 0.5) * 2;
-            } else {
-                ball.dx = 1;
-                ball.dy = (Math.random() - 0.5) * 2;
-            }
+            ball.speed = 500;
+            ball.dx = winner === 'player' ? 1 : -1;
+            ball.dy = (Math.random() - 0.5) * 1.5;
             
             const magnitude = Math.sqrt(ball.dx * ball.dx + ball.dy * ball.dy);
             ball.dx /= magnitude;
