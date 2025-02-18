@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Smooth Ping Pong</title>
+    <title>Easy Ping Pong</title>
     <style>
         body {
             background: #1a1a1a;
@@ -26,27 +26,23 @@
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
 
-        // Game state
         let lastTime = 0;
         let deltaTime = 0;
 
-        // Game objects with improved physics
         const ball = {
             x: canvas.width / 2,
             y: canvas.height / 2,
             size: 12,
-            speed: 500,
+            speed: 400,
             dx: 1,
             dy: 1,
-            maxSpeed: 1000,
-            acceleration: 1.05
+            maxSpeed: 800
         };
 
         const paddle = {
             width: 12,
             height: 100,
-            speed: 600,
-            dampening: 0.92  // Smoothing factor
+            speed: 600
         };
 
         const player = {
@@ -61,10 +57,10 @@
             y: canvas.height / 2 - paddle.height / 2,
             velocity: 0,
             score: 0,
-            reactionTime: 0.03  // Lower = harder
+            reactionTime: 0.5,  // Increased reaction time
+            maxSpeed: 200       // Reduced speed
         };
 
-        // Smooth input handling
         const keys = {
             up: false,
             down: false
@@ -81,18 +77,23 @@
         });
 
         function updatePaddles(deltaTime) {
-            // Player paddle physics-based movement
-            const targetVelocity = ((keys.down ? 1 : 0) - (keys.up ? 1 : 0)) * paddle.speed;
-            player.velocity = lerp(player.velocity, targetVelocity, 0.2);
-            player.y += player.velocity * deltaTime;
+            // Player movement
+            if (keys.up) player.y -= paddle.speed * deltaTime;
+            if (keys.down) player.y += paddle.speed * deltaTime;
 
-            // Computer AI with prediction and smoothing
-            const predictedY = ball.y + ball.dy * ball.speed * computer.reactionTime;
-            const targetY = predictedY - paddle.height / 2;
-            computer.velocity = lerp(computer.velocity, (targetY - computer.y) * 5, 0.1);
-            computer.y += computer.velocity * deltaTime;
+            // Weak computer AI
+            if (ball.y > computer.y + paddle.height) {
+                computer.y += computer.maxSpeed * deltaTime * Math.random(); // Random slow movement
+            } else if (ball.y < computer.y) {
+                computer.y -= computer.maxSpeed * deltaTime * Math.random();
+            }
 
-            // Boundary checks
+            // Sometimes move in wrong direction
+            if (Math.random() < 0.1) {
+                computer.y += (Math.random() - 0.5) * 100 * deltaTime;
+            }
+
+            // Boundaries
             player.y = clamp(player.y, 0, canvas.height - paddle.height);
             computer.y = clamp(computer.y, 0, canvas.height - paddle.height);
         }
@@ -101,17 +102,15 @@
             ball.x += ball.dx * ball.speed * deltaTime;
             ball.y += ball.dy * ball.speed * deltaTime;
 
-            // Wall collisions with improved bounce physics
+            // Wall collisions
             if (ball.y < ball.size || ball.y > canvas.height - ball.size) {
                 ball.dy *= -1;
                 ball.y = ball.y < ball.size ? ball.size : canvas.height - ball.size;
-                playSound('wall');
             }
 
-            // Paddle collisions with improved angle calculation
+            // Paddle collisions
             if (checkPaddleCollision(player) || checkPaddleCollision(computer)) {
-                playSound('paddle');
-                ball.speed = Math.min(ball.speed * ball.acceleration, ball.maxSpeed);
+                ball.speed = Math.min(ball.speed * 1.1, ball.maxSpeed);
             }
 
             // Scoring
@@ -134,7 +133,6 @@
                 ball.dx *= -1;
                 ball.dy = hitPos * 1.5;
                 
-                // Normalize ball direction vector
                 const magnitude = Math.sqrt(ball.dx * ball.dx + ball.dy * ball.dy);
                 ball.dx /= magnitude;
                 ball.dy /= magnitude;
@@ -147,11 +145,10 @@
         function resetBall(winner) {
             ball.x = canvas.width / 2;
             ball.y = canvas.height / 2;
-            ball.speed = 500;
+            ball.speed = 400;
             ball.dx = winner === 'player' ? 1 : -1;
             ball.dy = (Math.random() - 0.5) * 2;
             
-            // Normalize direction vector
             const magnitude = Math.sqrt(ball.dx * ball.dx + ball.dy * ball.dy);
             ball.dx /= magnitude;
             ball.dy /= magnitude;
@@ -177,39 +174,28 @@
             ctx.fillText(player.score, canvas.width / 4, 60);
             ctx.fillText(computer.score, 3 * canvas.width / 4, 60);
 
-            // Paddles with shadow effect
+            // Paddles and ball
             ctx.shadowBlur = 15;
             ctx.shadowColor = 'rgba(255, 255, 255, 0.5)';
             ctx.fillStyle = 'white';
+            
+            // Player paddle
             ctx.fillRect(player.x, player.y, paddle.width, paddle.height);
+            
+            // Computer paddle (slightly transparent to show it's weaker)
+            ctx.globalAlpha = 0.7;
             ctx.fillRect(computer.x, computer.y, paddle.width, paddle.height);
+            ctx.globalAlpha = 1.0;
 
-            // Ball with glow effect
+            // Ball
             ctx.beginPath();
             ctx.arc(ball.x, ball.y, ball.size, 0, Math.PI * 2);
             ctx.fill();
             ctx.shadowBlur = 0;
         }
 
-        // Utility functions
-        function lerp(start, end, t) {
-            return start * (1 - t) + end * t;
-        }
-
         function clamp(value, min, max) {
             return Math.max(min, Math.min(max, value));
-        }
-
-        // Simple sound effects
-        function playSound(type) {
-            const audio = new Audio();
-            audio.volume = 0.1;
-            if (type === 'paddle') {
-                audio.src = 'data:audio/wav;base64,UklGRl9vT19XQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YU...';
-            } else if (type === 'wall') {
-                audio.src = 'data:audio/wav;base64,UklGRl9vT19XQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YU...';
-            }
-            audio.play().catch(() => {});
         }
 
         function gameLoop(timestamp) {
