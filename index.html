@@ -1,54 +1,75 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Ping Pong</title>
+    <title>Smooth Ping Pong</title>
     <style>
+        body {
+            background: #1a1a1a;
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+        }
         canvas {
-            border: 2px solid black;
-            display: block;
-            margin: 0 auto;
+            border: 3px solid #333;
+            border-radius: 4px;
+            box-shadow: 0 0 20px rgba(255, 255, 255, 0.1);
         }
     </style>
 </head>
 <body>
-    <canvas id="gameCanvas" width="800" height="600"></canvas>
+    <canvas id="gameCanvas" width="900" height="600"></canvas>
 
     <script>
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
 
-        // Game objects
+        // Game state
+        let lastTime = 0;
+        let deltaTime = 0;
+
+        // Game objects with improved physics
         const ball = {
             x: canvas.width / 2,
             y: canvas.height / 2,
-            size: 10,
-            dx: 5,
-            dy: 5
+            size: 12,
+            speed: 500,
+            dx: 1,
+            dy: 1,
+            maxSpeed: 1000,
+            acceleration: 1.05
         };
 
         const paddle = {
-            width: 10,
+            width: 12,
             height: 100,
-            speed: 8
+            speed: 600,
+            dampening: 0.92  // Smoothing factor
         };
 
         const player = {
             x: 50,
-            y: canvas.height / 2 - paddle.height / 2
+            y: canvas.height / 2 - paddle.height / 2,
+            velocity: 0,
+            score: 0
         };
 
         const computer = {
             x: canvas.width - 50 - paddle.width,
-            y: canvas.height / 2 - paddle.height / 2
+            y: canvas.height / 2 - paddle.height / 2,
+            velocity: 0,
+            score: 0,
+            reactionTime: 0.03  // Lower = harder
         };
 
-        // Key controls
+        // Smooth input handling
         const keys = {
             up: false,
             down: false
         };
 
-        // Event listeners
         document.addEventListener('keydown', (e) => {
             if (e.key === 'ArrowUp') keys.up = true;
             if (e.key === 'ArrowDown') keys.down = true;
@@ -59,84 +80,150 @@
             if (e.key === 'ArrowDown') keys.down = false;
         });
 
-        function movePaddles() {
-            // Player paddle movement
-            if (keys.up && player.y > 0) player.y -= paddle.speed;
-            if (keys.down && player.y < canvas.height - paddle.height) player.y += paddle.speed;
+        function updatePaddles(deltaTime) {
+            // Player paddle physics-based movement
+            const targetVelocity = ((keys.down ? 1 : 0) - (keys.up ? 1 : 0)) * paddle.speed;
+            player.velocity = lerp(player.velocity, targetVelocity, 0.2);
+            player.y += player.velocity * deltaTime;
 
-            // Computer paddle movement
-            const computerCenter = computer.y + paddle.height / 2;
-            const ballCenter = ball.y;
-            
-            if (computerCenter < ballCenter - 35) {
-                computer.y += paddle.speed * 0.6;
-            } else if (computerCenter > ballCenter + 35) {
-                computer.y -= paddle.speed * 0.6;
+            // Computer AI with prediction and smoothing
+            const predictedY = ball.y + ball.dy * ball.speed * computer.reactionTime;
+            const targetY = predictedY - paddle.height / 2;
+            computer.velocity = lerp(computer.velocity, (targetY - computer.y) * 5, 0.1);
+            computer.y += computer.velocity * deltaTime;
+
+            // Boundary checks
+            player.y = clamp(player.y, 0, canvas.height - paddle.height);
+            computer.y = clamp(computer.y, 0, canvas.height - paddle.height);
+        }
+
+        function updateBall(deltaTime) {
+            ball.x += ball.dx * ball.speed * deltaTime;
+            ball.y += ball.dy * ball.speed * deltaTime;
+
+            // Wall collisions with improved bounce physics
+            if (ball.y < ball.size || ball.y > canvas.height - ball.size) {
+                ball.dy *= -1;
+                ball.y = ball.y < ball.size ? ball.size : canvas.height - ball.size;
+                playSound('wall');
+            }
+
+            // Paddle collisions with improved angle calculation
+            if (checkPaddleCollision(player) || checkPaddleCollision(computer)) {
+                playSound('paddle');
+                ball.speed = Math.min(ball.speed * ball.acceleration, ball.maxSpeed);
+            }
+
+            // Scoring
+            if (ball.x < 0) {
+                computer.score++;
+                resetBall('computer');
+            } else if (ball.x > canvas.width) {
+                player.score++;
+                resetBall('player');
             }
         }
 
-        function moveBall() {
-            ball.x += ball.dx;
-            ball.y += ball.dy;
-
-            // Top and bottom collisions
-            if (ball.y < 0 || ball.y > canvas.height) {
-                ball.dy *= -1;
-            }
-
-            // Paddle collisions
-            if (
-                (ball.x < player.x + paddle.width && 
-                ball.x > player.x && 
-                ball.y > player.y && 
-                ball.y < player.y + paddle.height) ||
-                (ball.x > computer.x && 
-                ball.x < computer.x + paddle.width && 
-                ball.y > computer.y && 
-                ball.y < computer.y + paddle.height)
-            ) {
+        function checkPaddleCollision(paddle) {
+            if (ball.x < paddle.x + paddle.width && 
+                ball.x > paddle.x - ball.size && 
+                ball.y > paddle.y - ball.size && 
+                ball.y < paddle.y + paddle.height + ball.size) {
+                
+                const hitPos = (ball.y - (paddle.y + paddle.height/2)) / (paddle.height/2);
                 ball.dx *= -1;
+                ball.dy = hitPos * 1.5;
+                
+                // Normalize ball direction vector
+                const magnitude = Math.sqrt(ball.dx * ball.dx + ball.dy * ball.dy);
+                ball.dx /= magnitude;
+                ball.dy /= magnitude;
+                
+                return true;
             }
+            return false;
+        }
 
-            // Reset ball if it goes out
-            if (ball.x < 0 || ball.x > canvas.width) {
-                ball.x = canvas.width / 2;
-                ball.y = canvas.height / 2;
-                ball.dx = 5 * (Math.random() < 0.5 ? 1 : -1);
-                ball.dy = 5 * (Math.random() < 0.5 ? 1 : -1);
-            }
+        function resetBall(winner) {
+            ball.x = canvas.width / 2;
+            ball.y = canvas.height / 2;
+            ball.speed = 500;
+            ball.dx = winner === 'player' ? 1 : -1;
+            ball.dy = (Math.random() - 0.5) * 2;
+            
+            // Normalize direction vector
+            const magnitude = Math.sqrt(ball.dx * ball.dx + ball.dy * ball.dy);
+            ball.dx /= magnitude;
+            ball.dy /= magnitude;
         }
 
         function draw() {
-            // Clear canvas
-            ctx.fillStyle = 'black';
+            // Background
+            ctx.fillStyle = '#1a1a1a';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            // Draw middle line
-            ctx.strokeStyle = 'white';
-            ctx.setLineDash([5, 15]);
+            // Center line
+            ctx.strokeStyle = '#333';
+            ctx.setLineDash([20, 15]);
             ctx.beginPath();
             ctx.moveTo(canvas.width / 2, 0);
             ctx.lineTo(canvas.width / 2, canvas.height);
             ctx.stroke();
 
-            // Draw paddles and ball
+            // Score
+            ctx.font = '48px Arial';
+            ctx.fillStyle = '#444';
+            ctx.textAlign = 'center';
+            ctx.fillText(player.score, canvas.width / 4, 60);
+            ctx.fillText(computer.score, 3 * canvas.width / 4, 60);
+
+            // Paddles with shadow effect
+            ctx.shadowBlur = 15;
+            ctx.shadowColor = 'rgba(255, 255, 255, 0.5)';
             ctx.fillStyle = 'white';
             ctx.fillRect(player.x, player.y, paddle.width, paddle.height);
             ctx.fillRect(computer.x, computer.y, paddle.width, paddle.height);
+
+            // Ball with glow effect
             ctx.beginPath();
             ctx.arc(ball.x, ball.y, ball.size, 0, Math.PI * 2);
             ctx.fill();
+            ctx.shadowBlur = 0;
         }
 
-        function gameLoop() {
-            movePaddles();
-            moveBall();
+        // Utility functions
+        function lerp(start, end, t) {
+            return start * (1 - t) + end * t;
+        }
+
+        function clamp(value, min, max) {
+            return Math.max(min, Math.min(max, value));
+        }
+
+        // Simple sound effects
+        function playSound(type) {
+            const audio = new Audio();
+            audio.volume = 0.1;
+            if (type === 'paddle') {
+                audio.src = 'data:audio/wav;base64,UklGRl9vT19XQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YU...';
+            } else if (type === 'wall') {
+                audio.src = 'data:audio/wav;base64,UklGRl9vT19XQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YU...';
+            }
+            audio.play().catch(() => {});
+        }
+
+        function gameLoop(timestamp) {
+            if (!lastTime) lastTime = timestamp;
+            deltaTime = (timestamp - lastTime) / 1000;
+            lastTime = timestamp;
+
+            updatePaddles(deltaTime);
+            updateBall(deltaTime);
             draw();
             requestAnimationFrame(gameLoop);
         }
 
-        gameLoop();
+        requestAnimationFrame(gameLoop);
     </script>
 </body>
 </html>
